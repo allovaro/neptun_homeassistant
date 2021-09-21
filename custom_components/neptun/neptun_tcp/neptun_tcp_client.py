@@ -117,10 +117,14 @@ class NeptunTcp:
         Get desired counter number value from buffer
         """
         start = 61 + (num - 1) * 5
-        end = 66 + (num - 1) * 5
+        end = 65 + (num - 1) * 5
         val = bytes.hex(self.data[start:end])
         val = int(val, 16)
-        return float(val) / 1000
+
+        if self.data[65 + (num - 1) * 5] != 0:
+            return float(val) / (1000 / self.data[65 + (num - 1) * 5])
+        else:
+            return float(val)
 
     def parse_data(self):
         #  Fill sensors
@@ -144,5 +148,3 @@ class NeptunTcp:
         self.get_state()
         self.parse_data()
         return True
-
-
