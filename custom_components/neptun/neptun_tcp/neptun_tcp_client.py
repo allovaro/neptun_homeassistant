@@ -43,18 +43,22 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_PORT = 6350
 DEFAULT_TIMEOUT = 5.0
-DEFAULT_RETRIES = 3
+DEFAULT_RETRIES = 4
 
 _MAGIC = 0x02
 _HEADER_LEN = 6
 _CRC_LEN = 2
 _MAX_PAYLOAD = 4096
 
-# The controller is documented to hang when polled harder than once every few
-# seconds, so exchanges are spaced out and retries back off rather than
-# hammering a device that is already struggling.
+# The controller drops into short unresponsive windows — measured at roughly
+# 5-10 seconds, during which it either times out or accepts and immediately
+# closes the socket, while still answering ping. A single poll must therefore
+# be able to straddle such a window: the retries are spread evenly rather than
+# bunched up, so with the default timeout of 5s and 4 attempts one poll spans
+# ~26 seconds (5 + 2 gap, four times), staying under a 30s scan interval while
+# leaving no ~10s window that can swallow every attempt.
 _MIN_INTERVAL = 1.0
-_RETRY_BACKOFF = 1.0
+_RETRY_GAP = 2.0
 
 _REQ_READ = b"\x02TQR"
 _REQ_WRITE = b"\x02TQW"
@@ -293,7 +297,7 @@ class NeptunClient:
                             err,
                         )
                         if attempt < self.retries:
-                            time.sleep(_RETRY_BACKOFF * attempt)
+                            time.sleep(_RETRY_GAP)
                 raise last_error  # type: ignore[misc]
             finally:
                 self._last_exchange = time.monotonic()
