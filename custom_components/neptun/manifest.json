@@ -1,10 +1,12 @@
 {
   "domain": "neptun",
   "name": "Neptun",
-  "documentation": "https://github.com/allovaro/neptun_homeassistant.git",
+  "documentation": "https://github.com/allovaro/neptun_homeassistant",
+  "issue_tracker": "https://github.com/allovaro/neptun_homeassistant/issues",
   "dependencies": [],
-  "codeowners": ["Kirill Sokolov"],
+  "codeowners": ["@allovaro"],
   "requirements": [],
+  "loggers": ["custom_components.neptun"],
   "iot_class": "local_polling",
-  "version": "0.1.0"
+  "version": "0.2.0"
 }

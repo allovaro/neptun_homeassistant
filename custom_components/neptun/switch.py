@@ -1,111 +1,94 @@
-"""Support for interacting with Digital Ocean droplets."""
+"""Valve and dry-mode control."""
+from __future__ import annotations
+
 import logging
+from typing import Any
 
-import voluptuous as vol
-
-from homeassistant.components.switch import PLATFORM_SCHEMA, SwitchEntity
-from homeassistant.const import (
-    ATTR_ATTRIBUTION,
-    CONF_NAME,
-    STATE_ON,
-    STATE_OFF,
+from homeassistant.components.switch import (
+    ENTITY_ID_FORMAT,
+    SwitchDeviceClass,
+    SwitchEntity,
 )
-import homeassistant.helpers.config_validation as cv
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from . import (
-    ATTRIBUTION,
-    DATA_NEPTUN,
-)
+from .const import DOMAIN
+from .coordinator import NeptunCoordinator, NeptunRuntime
+from .entity import NeptunEntity
 
 _LOGGER = logging.getLogger(__name__)
 
-DEFAULT_NAME = "Valves"
 
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-    }
-)
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up the Neptun switches."""
+    if discovery_info is None:
+        # Legacy "- platform: neptun" block; see the note in binary_sensor.py.
+        return
+
+    runtime: NeptunRuntime = hass.data[DOMAIN]
+    async_add_entities(
+        [
+            NeptunValvesSwitch(runtime.coordinator),
+            NeptunDrySwitch(runtime.coordinator),
+        ]
+    )
 
 
-def setup_platform(hass, config, add_entities, discovery_info=None):
-    """Set up the Neptun valves switch."""
-    host = hass.data.get(DATA_NEPTUN)
-    name = config[CONF_NAME]
-    if not host:
-        return False
+class NeptunValvesSwitch(NeptunEntity, SwitchEntity):
+    """Opens and closes the water valves."""
 
-    add_entities([NeptunValvesSwitch(host, name)], True)
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_icon = "mdi:water-pump"
 
-
-class NeptunValvesSwitch(SwitchEntity):
-    """Representation of a Neptun switch."""
-
-    def __init__(self, _host, _name):
-        """Initialize a new Neptun switch."""
-        self.neptun_instance = _host
-        self.switch_name = _name
-        self.data = None
-        self._state = None
-
-    @property
-    def name(self):
-        """Return the name of the switch."""
-        return f'neptun_{self.switch_name}'
+    def __init__(self, coordinator: NeptunCoordinator) -> None:
+        """Initialise the valve switch."""
+        super().__init__(coordinator, "valves")
+        self.entity_id = ENTITY_ID_FORMAT.format(f"{DOMAIN}_valves")
 
     @property
-    def available(self) -> bool:
-        """Return True if sensor is available."""
-        return self.neptun_instance.available
+    def is_on(self) -> bool | None:
+        """Return True while the valves are open."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.valves_open
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Open the valves."""
+        await self.coordinator.async_set_state(valves_open=True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Close the valves."""
+        await self.coordinator.async_set_state(valves_open=False)
+
+
+class NeptunDrySwitch(NeptunEntity, SwitchEntity):
+    """Toggles dry mode, which suppresses the floor sensors while cleaning."""
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_icon = "mdi:spray-bottle"
+
+    def __init__(self, coordinator: NeptunCoordinator) -> None:
+        """Initialise the dry mode switch."""
+        super().__init__(coordinator, "dry")
+        self.entity_id = ENTITY_ID_FORMAT.format(f"{DOMAIN}_dry")
 
     @property
-    def icon(self):
-        if self.switch_name == 'valves':
-            return 'mdi:water-pump'
-        else:
-            return 'mdi:spray-bottle'
+    def is_on(self) -> bool | None:
+        """Return True while dry mode is active."""
+        if self.coordinator.data is None:
+            return None
+        return self.coordinator.data.dry_mode
 
-    @property
-    def is_on(self):
-        """Return true if switch is on."""
-        return self._state == STATE_ON
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Enable dry mode, leaving the valves where they are."""
+        await self.coordinator.async_set_state(dry_mode=True)
 
-    @property
-    def extra_state_attributes(self):
-        """Return the state attributes of the Neptun."""
-        return {
-            ATTR_ATTRIBUTION: ATTRIBUTION,
-        }
-
-    def turn_on(self, **kwargs):
-        """Turn on the switch."""
-        if self.switch_name == 'valves':
-            self.neptun_instance.neptun.set_state(True, False)
-            self._state = STATE_ON
-        if self.switch_name == 'dry':
-            self.neptun_instance.neptun.set_state(False, True)
-            self._state = STATE_ON
-
-    def turn_off(self, **kwargs):
-        """Turn off the switch."""
-        if self.switch_name == 'valves':
-            self.neptun_instance.neptun.set_state(False, False)
-            self._state = STATE_OFF
-        if self.switch_name == 'dry':
-            self.neptun_instance.neptun.set_state(False, False)
-            self._state = STATE_OFF
-
-    def update(self):
-        """Get the latest data from the device and update the data."""
-        self.neptun_instance.update()
-        valves = False
-        dry = False
-        if self.neptun_instance.available:
-            valves = self.neptun_instance.neptun.get_valve_state()
-            dry = self.neptun_instance.neptun.get_dry_flag_state()
-
-        if self.switch_name == 'valves':
-            self._state = valves
-        if self.switch_name == 'dry':
-            self._state = dry
-
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Disable dry mode, leaving the valves where they are."""
+        await self.coordinator.async_set_state(dry_mode=False)
