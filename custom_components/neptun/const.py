@@ -8,9 +8,16 @@ DOMAIN = "neptun"
 CONF_COUNTERS = "counters"
 CONF_LINES = "lines"
 CONF_RETRIES = "retries"
+CONF_FAILURE_TOLERANCE = "failure_tolerance"
 CONF_WIRELESS_RECORD_SIZE = "wireless_record_size"
 
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=30)
+
+# How many consecutive failed polls to ride out on the last good reading before
+# marking the entities unavailable. The controller has occasional ~50s dead
+# windows (about two polls' worth); three keeps those invisible while a device
+# that is genuinely gone still surfaces within a couple of minutes.
+DEFAULT_FAILURE_TOLERANCE = 3
 
 ATTRIBUTION = "Data provided by Neptun water leak detector"
 

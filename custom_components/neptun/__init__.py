@@ -24,9 +24,11 @@ from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CONF_COUNTERS,
+    CONF_FAILURE_TOLERANCE,
     CONF_LINES,
     CONF_RETRIES,
     CONF_WIRELESS_RECORD_SIZE,
+    DEFAULT_FAILURE_TOLERANCE,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     FALLBACK_COUNTERS,
@@ -59,6 +61,9 @@ CONFIG_SCHEMA = vol.Schema(
                 ): cv.time_period,
                 vol.Optional(CONF_TIMEOUT, default=DEFAULT_TIMEOUT): vol.Coerce(float),
                 vol.Optional(CONF_RETRIES, default=DEFAULT_RETRIES): cv.positive_int,
+                vol.Optional(
+                    CONF_FAILURE_TOLERANCE, default=DEFAULT_FAILURE_TOLERANCE
+                ): cv.positive_int,
                 vol.Optional(CONF_COUNTERS): vol.All(
                     vol.Coerce(int), vol.Range(min=0, max=8)
                 ),
@@ -107,7 +112,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         retries=conf[CONF_RETRIES],
         wireless_record_size=conf[CONF_WIRELESS_RECORD_SIZE],
     )
-    coordinator = NeptunCoordinator(hass, client, conf[CONF_SCAN_INTERVAL])
+    coordinator = NeptunCoordinator(
+        hass,
+        client,
+        conf[CONF_SCAN_INTERVAL],
+        failure_tolerance=conf[CONF_FAILURE_TOLERANCE],
+    )
 
     await coordinator.async_refresh()
     status = coordinator.data
